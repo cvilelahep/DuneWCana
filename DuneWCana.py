@@ -26,7 +26,7 @@ nuTypes = {"nue"      : 12,
            "numu"     : 14}
 
 # Number of files per horn mode per nutype to process. Maximum is 100.
-nFiles = 100
+nFiles = 1
 
 baseFilePath = "/storage/shared/cvilela/DuneWC/"
 OutputPath = baseFilePath+"DuneWCana/Out/"
@@ -122,6 +122,9 @@ def CC0pi0pcriterion(event) :
     del wcEv
     return isCC
 
+def noSelection (event) :
+    return True
+
 def CCothercriterion(event) :
 
     isCCother = True
@@ -159,6 +162,9 @@ def main() :
     eSel.addCriterion("nseE", nseE)
     eSel.addCriterion("pidEpi0", pidEpi0)
 
+    noSel = eventSelector("AllEvents")
+    noSel.addCriterion("No selection", noSelection)
+
     # Initialise mode selectors
     cc0pi0pSel = intModeSelector("CC0pi0p")
     cc0pi0pSel.addCriterion("AllCuts", CC0pi0pcriterion)
@@ -168,8 +174,6 @@ def main() :
     ncSel.addCriterion("AllCuts", NCcriterion)
 
     # Dictionaries to keep histograms
-    hists1D = {}
-    hists2D = {}
     
     # Loop through horn modes
     for hornMode in hornCurrentModes :
@@ -185,11 +189,16 @@ def main() :
             # Book histograms:
             #              Name       nBins  Min Max
             histList1D = {"hErec" : [100,   0., 10000]}
+            histList1D["hNring"] = [10,   0., 10]
+            histList1D["hNsubEvents"] = [10,   0., 10]
+            histList1D["hEtrue"] = [100, 0, 5000]
 
             # Cut flow histograms, one for each combination of interaction mode and event sample:
-            for mode in intModeSelector.modes :
-                for sample in eventSelector.samples :
-                    histList1D["cutFlow_"+sample.name] = [len(sample.criteria), 0, len(sample.criteria)]
+            maxCuts = 0
+            for sample in eventSelector.samples :
+                if len(sample.criteria) > maxCuts :
+                    maxCuts = len(sample.criteria)
+            histList1D["cutFlow"] = [maxCuts, 0, maxCuts]
 
             # 2D histograms
             histList2D = {"hPCosTheta" : [100, 0, 5000, 100, -1, 1],
@@ -197,9 +206,9 @@ def main() :
                           "hNLLReMu"  : [100, 0, 5000, 100, -5000, 5000],
                           "hEtrueErec"  : [100, 0, 5000, 100, 0, 5000]}
 
-            hists1D = merge( hists1D, bookHists(histList1D, 1, hornMode, nuType) )
-            hists2D = merge( hists2D, bookHists(histList2D, 2, hornMode, nuType) )
-
+            hists1D = bookHists(histList1D, 1)
+            hists2D = bookHists(histList2D, 2)
+            
             # File loop
             for fNum in range(0, nFiles) :
                 # Open ROOT files
@@ -247,6 +256,7 @@ def main() :
                         m_p = 938.2
                         v_nuc = 27.
 
+                        noSample = False
                         if sampleName == "SingleRingELike" :
                             fQindex = 1
                             m_l = 0.511
@@ -254,9 +264,20 @@ def main() :
                             fQindex = 2
                             m_l = 105.7
                         else :
-                            print "Unkown sample, not filling histograms"
-                            continue
+                            noSample = True
 
+                        wcEv = event.wcsimrootevent
+                        # Fill histograms that do not require a sample to be well defined (i.e., not single-ring)
+                        hists1D["hNring"][sampleName][modeName].Fill(event.fqmrnring[0])
+                        hists1D["hNsubEvents"][sampleName][modeName].Fill(event.fqnse)
+                        hists1D["hEtrue"][sampleName][modeName].Fill(wcEv.GetTrigger(0).GetTracks().At(0).GetP())
+                        hists2D["hNLLRePi0"][sampleName][modeName].Fill(event.fqpi0mass[0], event.fqpi0nll[0] - event.fq1rnll[0*7+1])
+                        hists2D["hNLLReMu"][sampleName][modeName].Fill(event.fq1rmom[0*7+1], event.fq1rnll[0*7+2] - event.fq1rnll[0*7+1])
+
+                        if noSample :
+                            del wcEv
+                            continue
+                        
                         p_l = event.fq1rmom[0*7+fQindex]
 
                         E_tot = (p_l**2 + m_l**2)**0.5
@@ -275,37 +296,36 @@ def main() :
                             # Double check this... is Vnuc the same?
                             Erec = ( (m_p - v_nuc)*E_tot - m_l**2/2 + m_p*v_nuc - v_nuc**2/2 + (m_n**2 - m_p**2)/2 ) / ( m_p - v_nuc - E_tot + p_l *cos_th_beam )
 
+
+                        
                         # Fill Histograms here
-                        hists1D["hErec"][hornMode][sampleName][modeName][nuType].Fill(Erec)
-                        hists2D["hPCosTheta"][hornMode][sampleName][modeName][nuType].Fill(p_l, cos_th_beam)
-                        hists2D["hNLLRePi0"][hornMode][sampleName][modeName][nuType].Fill(event.fqpi0mass[0], event.fqpi0nll[0] - event.fq1rnll[0*7+1])
-                        hists2D["hNLLReMu"][hornMode][sampleName][modeName][nuType].Fill(event.fq1rmom[0*7+1], event.fq1rnll[0*7+2] - event.fq1rnll[0*7+1])
-                        wcEv = event.wcsimrootevent
-                        hists2D["hEtrueErec"][hornMode][sampleName][modeName][nuType].Fill(Erec, wcEv.GetTrigger(0).GetTracks().At(0).GetP())
+                        hists1D["hErec"][sampleName][modeName].Fill(Erec)
+                        hists2D["hPCosTheta"][sampleName][modeName].Fill(p_l, cos_th_beam)
+                        hists2D["hEtrueErec"][sampleName][modeName].Fill(Erec, wcEv.GetTrigger(0).GetTracks().At(0).GetP())
 
                         del wcEv
                     del event
 
                     # Make some plots (set to false for batch)
-            makePlots = True
+            makePlots = False
             if makePlots :
                 ErecStack = ROOT.THStack("Erec", hornMode+" "+nuType+";Erec [MeV]")
-                hists1D["hErec"][hornMode]["SingleRingMuLike"]["CC0pi0p"][nuType].SetFillColor(ROOT.kRed)
-                hists1D["hErec"][hornMode]["SingleRingMuLike"]["CCother"][nuType].SetFillColor(ROOT.kBlue)
-                hists1D["hErec"][hornMode]["SingleRingMuLike"]["NC"][nuType].SetFillColor(ROOT.kGreen)
+                hists1D["hErec"]["SingleRingMuLike"]["CC0pi0p"].SetFillColor(ROOT.kRed)
+                hists1D["hErec"]["SingleRingMuLike"]["CCother"].SetFillColor(ROOT.kBlue)
+                hists1D["hErec"]["SingleRingMuLike"]["NC"].SetFillColor(ROOT.kGreen)
 
-                ErecStack.Add(hists1D["hErec"][hornMode]["SingleRingMuLike"]["CC0pi0p"][nuType])
-                ErecStack.Add(hists1D["hErec"][hornMode]["SingleRingMuLike"]["CCother"][nuType])
-                ErecStack.Add(hists1D["hErec"][hornMode]["SingleRingMuLike"]["NC"][nuType])
+                ErecStack.Add(hists1D["hErec"]["SingleRingMuLike"]["CC0pi0p"])
+                ErecStack.Add(hists1D["hErec"]["SingleRingMuLike"]["CCother"])
+                ErecStack.Add(hists1D["hErec"]["SingleRingMuLike"]["NC"])
 
                 c1 = ROOT.TCanvas()
                 ErecStack.Draw()
                 c1.Draw()
 
-                hEMuPID = hists2D["hNLLReMu"][hornMode]["SingleRingMuLike"]["CC0pi0p"][nuType].Clone()
-                hEMuPID.Add(hists2D["hNLLReMu"][hornMode]["SingleRingMuLike"]["CCother"][nuType])
-                hEMuPID.Add(hists2D["hNLLReMu"][hornMode]["SingleRingELike"]["CC0pi0p"][nuType])
-                hEMuPID.Add(hists2D["hNLLReMu"][hornMode]["SingleRingELike"]["CCother"][nuType])
+                hEMuPID = hists2D["hNLLReMu"]["SingleRingMuLike"]["CC0pi0p"].Clone()
+                hEMuPID.Add(hists2D["hNLLReMu"]["SingleRingMuLike"]["CCother"])
+                hEMuPID.Add(hists2D["hNLLReMu"]["SingleRingELike"]["CC0pi0p"])
+                hEMuPID.Add(hists2D["hNLLReMu"]["SingleRingELike"]["CCother"])
 
                 hEMuPID.SetMarkerColor(ROOT.kRed)
 
@@ -325,7 +345,8 @@ def main() :
                     cutCount = 1
                     if combinedName in sample.countByIntMode :
                         for cut in sample.cutOrder:
-                            hists1D["cutFlow_"+sample.name][hornMode][sample.name][mode.name][nuType].SetBinContent(cutCount, sample.countByIntMode[combinedName][cut])
+                            hists1D["cutFlow"][sample.name][mode.name].SetBinContent(cutCount, sample.countByIntMode[combinedName][cut])
+                            hists1D["cutFlow"][sample.name][mode.name].GetXaxis().SetBinLabel(cutCount, cut)
                             cutCount += 1
             
             fOut.Write()
@@ -419,52 +440,38 @@ def bookHists (histList, nDim) :
     hists = {}
     for hist in histList :
         hists[hist] = {}
-        for hornMode in hornCurrentModes :
-            hists[hist][hornMode] = {}
-            for sample in eventSelector.samples :
-                hists[hist][hornMode][sample.name] = {}
-                for interactionMode in intModeSelector.modes :
-                    hists[hist][hornMode][sample.name][interactionMode.name] = {} 
-                    for nuType in nuTypes :
-                        histName = hist+"_"+hornMode+"_"+sample.name+"_"+interactionMode.name+"_"+nuType
-                        if nDim == 1:
-                            hists[hist][hornMode][sample.name][interactionMode.name][nuType] = ROOT.TH1D(histName, histName, histList[hist][0], histList[hist][1], histList[hist][2])
-                        elif nDim == 2:
-                            hists[hist][hornMode][sample.name][interactionMode.name][nuType] = ROOT.TH2D(histName, histName, histList[hist][0], histList[hist][1], histList[hist][2], histList[hist][3], histList[hist][4], histList[hist][5])
-                        else :
-                            print "bookHists ERROR: Invalid number of dimentions", nDim, "Quitting"
-                            exit(-11)
-    return hists
-
-def bookHists (histList, nDim, hornMode, nuType) :
-    hists = {}
-    for hist in histList :
-        hists[hist] = {}
-        hists[hist][hornMode] = {}
         for sample in eventSelector.samples :
-            hists[hist][hornMode][sample.name] = {}
+            hists[hist][sample.name] = {}
             for interactionMode in intModeSelector.modes :
-                hists[hist][hornMode][sample.name][interactionMode.name] = {} 
-                histName = hist+"_"+hornMode+"_"+sample.name+"_"+interactionMode.name+"_"+nuType
+                hists[hist][sample.name][interactionMode.name] = {} 
+                histName = hist+"_"+sample.name+"_"+interactionMode.name
                 if nDim == 1:
-                    hists[hist][hornMode][sample.name][interactionMode.name][nuType] = ROOT.TH1D(histName, histName, histList[hist][0], histList[hist][1], histList[hist][2])
+                    hists[hist][sample.name][interactionMode.name] = ROOT.TH1D(histName, histName, histList[hist][0], histList[hist][1], histList[hist][2])
                 elif nDim == 2:
-                    hists[hist][hornMode][sample.name][interactionMode.name][nuType] = ROOT.TH2D(histName, histName, histList[hist][0], histList[hist][1], histList[hist][2], histList[hist][3], histList[hist][4], histList[hist][5])
+                    hists[hist][sample.name][interactionMode.name] = ROOT.TH2D(histName, histName, histList[hist][0], histList[hist][1], histList[hist][2], histList[hist][3], histList[hist][4], histList[hist][5])
                 else :
                     print "bookHists ERROR: Invalid number of dimentions", nDim, "Quitting"
                     exit(-11)
     return hists
 
-def merge(source, destination):
-    for key, value in source.items():
-        if isinstance(value, dict):
-            # get node or create one
-            node = destination.setdefault(key, {})
-            merge(value, node)
-        else:
-            destination[key] = value
-            
-    return destination
+def bookHists (histList, nDim) :
+    hists = {}
+    for hist in histList :
+        hists[hist] = {}
+        for sample in eventSelector.samples :
+            hists[hist][sample.name] = {}
+            for interactionMode in intModeSelector.modes :
+                hists[hist][sample.name][interactionMode.name] = {} 
+                histName = hist+"_"+sample.name+"_"+interactionMode.name
+                if nDim == 1:
+                    hists[hist][sample.name][interactionMode.name] = ROOT.TH1D(histName, histName, histList[hist][0], histList[hist][1], histList[hist][2])
+                elif nDim == 2:
+                    hists[hist][sample.name][interactionMode.name] = ROOT.TH2D(histName, histName, histList[hist][0], histList[hist][1], histList[hist][2], histList[hist][3], histList[hist][4], histList[hist][5])
+                else :
+                    print "bookHists ERROR: Invalid number of dimentions", nDim, "Quitting"
+                    exit(-11)
+    return hists
+
 
 if __name__ == '__main__' :
     main()
