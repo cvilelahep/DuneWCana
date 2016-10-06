@@ -12,21 +12,21 @@ ROOT.gSystem.Load(WCSimRootLibPath)
 #ROOT.SetMemoryPolicy( ROOT.kMemoryStrict )
 
 # Change the following to run on a subset of files
-#hornCurrentModes = ["FHC", "RHC"]
-hornCurrentModes = ["FHC"]
-
-#nuTypes = {"nue"      : 12,
-#           "numu"     : 14,
-#           "nutau"    : 16,
-#           "nuebar"   : -12,
-#           "numubar"  : -14,
-#           "nutaubar" : -16}
+hornCurrentModes = ["FHC", "RHC"]
+#hornCurrentModes = ["FHC"]
 
 nuTypes = {"nue"      : 12,
-           "numu"     : 14}
+           "numu"     : 14,
+           "nutau"    : 16,
+           "nuebar"   : -12,
+           "numubar"  : -14,
+           "nutaubar" : -16}
+
+#nuTypes = {"nue"      : 12,
+#           "numu"     : 14}
 
 # Number of files per horn mode per nutype to process. Maximum is 100.
-nFiles = 1
+nFiles = 100
 
 baseFilePath = "/storage/shared/cvilela/DuneWC/"
 OutputPath = baseFilePath+"DuneWCana/Out/"
