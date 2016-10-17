@@ -235,7 +235,7 @@ def main() :
 
                 # Loop through events
                 for event in tFQ :
-                    
+
                     sampleNames = []
                     modeNames = []
 
@@ -372,7 +372,7 @@ def effectiveDecaye(event) :
     
     # Loop through particles
     for par in range(0, wcEv.GetTrigger(0).GetNtrack()) :
-        if not wcEv.GetTrigger(0).GetTracks().At(par).GetFlag() :
+        if wcEv.GetTrigger(0).GetTracks().At(par).GetFlag() :
             continue
         # Is an electron
         if abs(wcEv.GetTrigger(0).GetTracks().At(par).GetIpnu()) == 11 :
@@ -380,12 +380,14 @@ def effectiveDecaye(event) :
             if abs(wcEv.GetTrigger(0).GetTracks().At(par).GetParenttype()) == 13 :
                 # This is a Michel electron, save deltaT
                 deltaTs.append(wcEv.GetTrigger(0).GetTracks().At(par).GetTime())
-    del wcEv
+
                 
     for trueDeltaT in deltaTs :
-        prob = michelTagprob( trueDeltaT )
-        if np.random.uniform <= prob :
+        prob = michelTagProb( trueDeltaT )
+        if np.random.uniform() <= prob :
             nEffMichels += 1
+            
+    del wcEv
     return nEffMichels
             
 def michelTagProb( deltaT ) :
