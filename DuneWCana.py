@@ -68,7 +68,8 @@ def pidMuE (event) :
     return event.fq1rnll[0*7 + 2] - event.fq1rnll[0*7 + 1] < 2000
 
 def nseMu (event) :
-    return True
+    effdecaye = effectiveDecaye(event)
+    return effdecaye <= 1
 #    return event.fqnse <= 2
 
 # Single-ring e-like cuts:
@@ -93,7 +94,8 @@ def pidEmu (event) :
     return event.fq1rnll[0*7 + 2] - event.fq1rnll[0*7 + 1] >= 2000
 
 def nseE (event) :
-    return True
+    effdecaye = effectiveDecaye(event)
+    return effdecaye == 0
     #return event.fqnse == 1
 
 def pidEpi0 (event) :
@@ -233,7 +235,7 @@ def main() :
 
                 # Loop through events
                 for event in tFQ :
-
+                    
                     sampleNames = []
                     modeNames = []
 
@@ -357,6 +359,46 @@ def main() :
 
     return 
 
+# This function implements an effective decay-e cut efficiency to circumvent the problems with the initial WCSim production.
+# Efficiency is based on this talk:
+# http://t2k-canada.nd280.org/projects/physics/sk/meetings/3march2016/mjiangfiTQun/view
+def effectiveDecaye(event) :
+
+    wcEv = event.wcsimrootevent
+    
+    deltaTs = []
+
+    nEffMichels = 0
+    
+    # Loop through particles
+    for par in range(0, wcEv.GetTrigger(0).GetNtrack()) :
+        if not wcEv.GetTrigger(0).GetTracks().At(par).GetFlag() :
+            continue
+        # Is an electron
+        if abs(wcEv.GetTrigger(0).GetTracks().At(par).GetIpnu()) == 11 :
+            # Parent is muon
+            if abs(wcEv.GetTrigger(0).GetTracks().At(par).GetParenttype()) == 13 :
+                # This is a Michel electron, save deltaT
+                deltaTs.append(wcEv.GetTrigger(0).GetTracks().At(par).GetTime())
+    del wcEv
+                
+    for trueDeltaT in deltaTs :
+        prob = michelTagprob( trueDeltaT )
+        if np.random.uniform <= prob :
+            nEffMichels += 1
+    return nEffMichels
+            
+def michelTagProb( deltaT ) :
+    # ~Linear up to 500 ns
+    if deltaT < 500. :
+        return 0.0015*deltaT
+    # ~Flat between 500 and 1000 ns
+    elif deltaT < 1000. :
+        return 0.75
+    # ~Flat above 1000 (but better since no effect from PMT dead-time)
+    else :
+        return 0.95
+    
 class baseSelector :
 
     def __init__ (self, name) :
