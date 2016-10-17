@@ -9,11 +9,9 @@ import collections
 # Setup WCSim libraries
 WCSimRootLibPath = "/storage/shared/cvilela/WCSim_v151/WCSim/libWCSimRoot.so"
 ROOT.gSystem.Load(WCSimRootLibPath)
-#ROOT.SetMemoryPolicy( ROOT.kMemoryStrict )
 
-# Change the following to run on a subset of files
+# Change the following (or use a header_*.py file) to run on a subset of files
 hornCurrentModes = ["FHC", "RHC"]
-#hornCurrentModes = ["FHC"]
 
 nuTypes = {"nue"      : 12,
            "numu"     : 14,
@@ -21,9 +19,6 @@ nuTypes = {"nue"      : 12,
            "nuebar"   : -12,
            "numubar"  : -14,
            "nutaubar" : -16}
-
-#nuTypes = {"nue"      : 12,
-#           "numu"     : 14}
 
 # Number of files per horn mode per nutype to process. Maximum is 100.
 nFiles = 100
@@ -146,6 +141,16 @@ def NCcriterion(event) :
         
 def main() :
 
+    # Give one of the header_*.py files as argument to run over a subset of files
+    if len(sys.argv) == 2 :
+        print sys.argv
+        execfile(sys.argv[1])
+
+    print "Running horn modes:"
+    print hornCurrentModes
+    print "Running neutrino types:"
+    print nuTypes
+        
     # Initialise event selectors
     muSel = eventSelector("SingleRingMuLike")
     muSel.addCriterion("FCmu", FCmu)
@@ -229,8 +234,8 @@ def main() :
                 # Loop through events
                 for event in tFQ :
 
-                    sampleName = ""
-                    modeName = ""
+                    sampleNames = []
+                    modeNames = []
 
                     isMode = False
                     isSelected = False
@@ -238,72 +243,71 @@ def main() :
                     for mode in intModeSelector.modes :
                         isMode =  mode.passCriteria(event)
                         if isMode :
-                            modeName = mode.name
-                            break
+                            modeNames.append( mode.name )
 
-                    for sample in eventSelector.samples :
-                        isSelected = sample.passCriteria(event, modeName, nuType)
-                        if isSelected :
-                            sampleName = sample.name
-                            break
+                    for modeName in modeNames :
+                        for sample in eventSelector.samples :
+                            isSelected = sample.passCriteria(event, modeName, nuType)
+                            if isSelected :
+                                sampleNames.append( sample.name )
 
-                    if isMode and isSelected :
+                        for sampleName in sampleNames :
 
-                        # Variables for getting kinematics / Erec
-                        fQindex = -1
-                        m_l = -1
-                        m_n = 939.6
-                        m_p = 938.2
-                        v_nuc = 27.
+                            # Variables for getting kinematics / Erec
+                            fQindex = -1
+                            m_l = -1
+                            m_n = 939.6
+                            m_p = 938.2
+                            v_nuc = 27.
 
-                        noSample = False
-                        if sampleName == "SingleRingELike" :
-                            fQindex = 1
-                            m_l = 0.511
-                        elif sampleName == "SingleRingMuLike" :
-                            fQindex = 2
-                            m_l = 105.7
-                        else :
-                            noSample = True
+                            noSample = False
+                            if sampleName == "SingleRingELike" :
+                                fQindex = 1
+                                m_l = 0.511
+                            elif sampleName == "SingleRingMuLike" :
+                                fQindex = 2
+                                m_l = 105.7
+                            else :
+                                noSample = True
 
-                        wcEv = event.wcsimrootevent
-                        # Fill histograms that do not require a sample to be well defined (i.e., not single-ring)
-                        hists1D["hNring"][sampleName][modeName].Fill(event.fqmrnring[0])
-                        hists1D["hNsubEvents"][sampleName][modeName].Fill(event.fqnse)
-                        hists1D["hEtrue"][sampleName][modeName].Fill(wcEv.GetTrigger(0).GetTracks().At(0).GetP())
-                        hists2D["hNLLRePi0"][sampleName][modeName].Fill(event.fqpi0mass[0], event.fqpi0nll[0] - event.fq1rnll[0*7+1])
-                        hists2D["hNLLReMu"][sampleName][modeName].Fill(event.fq1rmom[0*7+1], event.fq1rnll[0*7+2] - event.fq1rnll[0*7+1])
+                            wcEv = event.wcsimrootevent
+                            # Fill histograms that do not require a sample to be well defined (i.e., not single-ring)
+                            hists1D["hNring"][sampleName][modeName].Fill(event.fqmrnring[0])
+                            hists1D["hNsubEvents"][sampleName][modeName].Fill(event.fqnse)
+                            hists1D["hEtrue"][sampleName][modeName].Fill(wcEv.GetTrigger(0).GetTracks().At(0).GetP())
+                            hists2D["hNLLRePi0"][sampleName][modeName].Fill(event.fqpi0mass[0], event.fqpi0nll[0] - event.fq1rnll[0*7+1])
+                            hists2D["hNLLReMu"][sampleName][modeName].Fill(event.fq1rmom[0*7+1], event.fq1rnll[0*7+2] - event.fq1rnll[0*7+1])
 
-                        if noSample :
+                            if noSample :
+                                del wcEv
+                                continue
+
+                            p_l = event.fq1rmom[0*7+fQindex]
+
+                            E_tot = (p_l**2 + m_l**2)**0.5
+
+                            dir_nu = trueNuDir
+
+                            dir_l = [event.fq1rdir[0*7*3 + 1*3 + 0],
+                                     event.fq1rdir[0*7*3 + 1*3 + 1],
+                                     event.fq1rdir[0*7*3 + 1*3 + 2]]
+
+                            cos_th_beam = sum([dir_nu[i]*dir_l[i] for i in 0,1,2]) / (sum([x**2 for x in dir_l])**0.5 * sum([x**2 for x in dir_nu])**0.5)
+
+                            if hornMode == "FHC" :
+                                Erec = ( (m_n - v_nuc)*E_tot - m_l**2/2 + m_n*v_nuc - v_nuc**2/2 + (m_p**2 - m_n**2)/2 ) / ( m_n - v_nuc - E_tot + p_l *cos_th_beam )
+                            elif hornMode == "RHC" :
+                                # Double check this... is Vnuc the same?
+                                Erec = ( (m_p - v_nuc)*E_tot - m_l**2/2 + m_p*v_nuc - v_nuc**2/2 + (m_n**2 - m_p**2)/2 ) / ( m_p - v_nuc - E_tot + p_l *cos_th_beam )
+
+
+
+                            # Fill Histograms here
+                            hists1D["hErec"][sampleName][modeName].Fill(Erec)
+                            hists2D["hPCosTheta"][sampleName][modeName].Fill(p_l, cos_th_beam)
+                            hists2D["hEtrueErec"][sampleName][modeName].Fill(Erec, wcEv.GetTrigger(0).GetTracks().At(0).GetP())
+
                             del wcEv
-                            continue
-                        
-                        p_l = event.fq1rmom[0*7+fQindex]
-
-                        E_tot = (p_l**2 + m_l**2)**0.5
-
-                        dir_nu = trueNuDir
-
-                        dir_l = [event.fq1rdir[0*7*3 + 1*3 + 0],
-                                 event.fq1rdir[0*7*3 + 1*3 + 1],
-                                 event.fq1rdir[0*7*3 + 1*3 + 2]]
-
-                        cos_th_beam = sum([dir_nu[i]*dir_l[i] for i in 0,1,2]) / (sum([x**2 for x in dir_l])**0.5 * sum([x**2 for x in dir_nu])**0.5)
-
-                        if hornMode == "FHC" :
-                            Erec = ( (m_n - v_nuc)*E_tot - m_l**2/2 + m_n*v_nuc - v_nuc**2/2 + (m_p**2 - m_n**2)/2 ) / ( m_n - v_nuc - E_tot + p_l *cos_th_beam )
-                        elif hornMode == "RHC" :
-                            # Double check this... is Vnuc the same?
-                            Erec = ( (m_p - v_nuc)*E_tot - m_l**2/2 + m_p*v_nuc - v_nuc**2/2 + (m_n**2 - m_p**2)/2 ) / ( m_p - v_nuc - E_tot + p_l *cos_th_beam )
-
-
-                        
-                        # Fill Histograms here
-                        hists1D["hErec"][sampleName][modeName].Fill(Erec)
-                        hists2D["hPCosTheta"][sampleName][modeName].Fill(p_l, cos_th_beam)
-                        hists2D["hEtrueErec"][sampleName][modeName].Fill(Erec, wcEv.GetTrigger(0).GetTracks().At(0).GetP())
-
-                        del wcEv
                     del event
 
                     # Make some plots (set to false for batch)
@@ -368,7 +372,6 @@ class baseSelector :
         self.criteria[cutName] = criterion
         self.count[cutName] = 0
 
-    # If interaction mode is given *ONLY* interaction mode counters will be incremented
     def passCriteria(self, event, intModeName = None, nuType = None) :
         
         combinedName = None
